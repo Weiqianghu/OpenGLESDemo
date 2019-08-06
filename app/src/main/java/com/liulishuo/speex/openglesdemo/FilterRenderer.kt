@@ -22,6 +22,8 @@ class FilterRenderer(context: Context) : BaseRenderer(context) {
         filterList.add(LightUpFilter(context))
         filterList.add(TranslateFilter(context))
         filterList.add(ScaleFilter(context))
+        filterList.add(CloneFullFilter(context))
+        filterList.add(ClonePartFilter(context))
 
         currentFilter = filterList[0]
     }
@@ -200,5 +202,59 @@ class ScaleFilter(context: Context) : BaseFilter(context, VERTEX_SHADER, FRAGMEN
         super.onDraw()
         val intensity = abs(cos((System.currentTimeMillis() - startTime) / 1000.0) * 1)
         GLES20.glUniform1f(intensityLocation, intensity.toFloat())
+    }
+}
+
+class CloneFullFilter(context: Context) : BaseFilter(context, VERTEX_SHADER, FRAGMENT_SHADER) {
+    companion object {
+        private const val FRAGMENT_SHADER = """
+            precision mediump float;
+            varying vec2 v_TexCoord;
+            uniform sampler2D u_TextureUnit;
+            uniform float cloneCount;
+            void main() {
+                gl_FragColor = texture2D(u_TextureUnit, v_TexCoord * cloneCount);
+            }
+        """
+    }
+
+    override fun onCreated() {
+        super.onCreated()
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "cloneCount"), 6.0f)
+    }
+}
+
+class ClonePartFilter(context: Context) : BaseFilter(context, VERTEX_SHADER, FRAGMENT_SHADER) {
+    companion object {
+        private const val FRAGMENT_SHADER = """
+            precision mediump float;
+            varying vec2 v_TexCoord;
+            uniform sampler2D u_TextureUnit;
+            uniform float isVertical;
+            uniform float isHorizontal;
+            uniform float cloneCount;
+            void main(){
+                float coordX = v_TexCoord.x;
+                float coordY = v_TexCoord.y;
+                if(isVertical == 1.0){
+                    float width = 1.0 / cloneCount;
+                    float startX = 0.0;
+                    coordX = mod(v_TexCoord.x , width) + startX;
+                }
+                if(isHorizontal == 1.0){
+                    float height = 1.0 / cloneCount;
+                    float startY = 0.0;
+                    coordY = mod(v_TexCoord.y, height) + startY;
+                }
+                gl_FragColor = texture2D(u_TextureUnit, vec2(coordX, coordY));
+            }
+        """
+    }
+
+    override fun onCreated() {
+        super.onCreated()
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "isVertical"), 1.0f)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "isHorizontal"), 1.0f)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "cloneCount"), 2.0f)
     }
 }
