@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import java.nio.ByteBuffer
+import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 private const val BYTES_PER_FLOAT = 4
@@ -40,9 +41,18 @@ abstract class BaseRenderer(val context: Context) : GLSurfaceView.Renderer {
         return GLES20.glGetAttribLocation(program, name)
     }
 
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        GLES20.glClearColor(0f, 0f, 0f, 1f)
+    }
+
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+        GLES20.glViewport(0, 0, width, height)
         outputWidth = width
         outputHeight = height
+    }
+
+    override fun onDrawFrame(gl: GL10?) {
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
     }
 
     protected fun onReadPixel(x: Int = 0, y: Int = 0, width: Int = outputWidth, height: Int = outputHeight) {
