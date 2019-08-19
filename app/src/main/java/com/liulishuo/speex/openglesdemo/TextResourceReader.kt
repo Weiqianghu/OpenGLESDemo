@@ -7,7 +7,7 @@ import java.io.InputStreamReader
 import java.lang.StringBuilder
 
 object TextResourceReader {
-    fun readTextFileFromeResource(context: Context, @RawRes resourceId: Int): String {
+    fun readTextFileFromResource(context: Context, @RawRes resourceId: Int): String {
         val body = StringBuilder()
 
         context.resources?.openRawResource(resourceId)?.let {
