@@ -8,6 +8,7 @@ import com.liulishuo.speex.openglesdemo.TextResourceReader
 
 const val U_MATRIX = "u_Matrix"
 const val U_TEXTURE_UNINT = "u_TextureUnit"
+const val U_COLOR = "u_Color"
 
 const val A_POSITION = "a_Position"
 const val A_COLOR = "a_Color"
