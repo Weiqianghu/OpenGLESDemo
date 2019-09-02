@@ -1,5 +1,6 @@
 package com.liulishuo.speex.openglesdemo
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
@@ -7,32 +8,55 @@ import android.opengl.Matrix
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.util.AttributeSet
+import android.util.Log
+import android.view.MotionEvent
 import com.liulishuo.speex.openglesdemo.data.PerspectiveMatrix
-import com.liulishuo.speex.openglesdemo.data.ProjectionMatrix
 import com.liulishuo.speex.openglesdemo.objects.Mallet
 import com.liulishuo.speex.openglesdemo.objects.Puck
 import com.liulishuo.speex.openglesdemo.objects.Table
 import com.liulishuo.speex.openglesdemo.programs.ColorShaderProgram
 import com.liulishuo.speex.openglesdemo.programs.TextureShaderProgram
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import com.liulishuo.speex.openglesdemo.util.Geometry
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
+private const val TAG = "AirHockeyActivity"
+
 class AirHockeyActivity : AppCompatActivity() {
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(AirHockeyGLSurfaceView(this))
+        val airHockeyGLSurfaceView = AirHockeyGLSurfaceView(this)
+        val airHockeyRenderer = AirHockeyRenderer(this)
+        airHockeyGLSurfaceView.setRenderer(airHockeyRenderer)
+
+        airHockeyGLSurfaceView.setOnTouchListener { v, event ->
+            val normalizedX = (event.x / v.width.toFloat()) * 2 - 1
+            val normalizedY = -((event.y / v.height.toFloat()) * 2 - 1)
+
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                airHockeyGLSurfaceView.queueEvent {
+                    airHockeyRenderer.handleTouchPress(normalizedX, normalizedY)
+                }
+            } else if (event.action == MotionEvent.ACTION_MOVE) {
+                airHockeyGLSurfaceView.queueEvent {
+                    airHockeyRenderer.handleTouchDrag(normalizedX, normalizedY)
+                }
+            }
+            return@setOnTouchListener true
+        }
+        setContentView(airHockeyGLSurfaceView)
     }
 }
 
-private class AirHockeyGLSurfaceView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
+private class AirHockeyGLSurfaceView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null
+) :
     GLSurfaceView(context, attrs) {
     init {
         setEGLContextClientVersion(2)
-        val airHockeyRenderer = AirHockeyRenderer(context)
-        setRenderer(airHockeyRenderer)
 //        renderMode = RENDERMODE_WHEN_DIRTY
     }
 }
@@ -52,6 +76,8 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
     private val viewProjectionMatrix = FloatArray(16)
     private val modelViewProjectionMatrix = FloatArray(16)
 
+    private val invertedViewProjectionMatrix = FloatArray(16)
+
     private var texture: Int = 0
 
     private var start: Long = 0
@@ -62,6 +88,9 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
     private val eyeZStride = 2.2 / (5 * 1000)
     private val startEyesZ = 0
     private val endEyesZ = 2.2
+
+    private var malletPressed = false
+    private lateinit var blueMalletPosition: Geometry.Point
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         super.onSurfaceCreated(gl, config)
@@ -83,7 +112,10 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
         super.onSurfaceChanged(gl, width, height)
         GLES20.glViewport(0, 0, width, height)
         perspectiveMatrix.onSurfaceChanged(width, height)
-
+        Matrix.setLookAtM(
+            viewMatrix, 0, 0f, 1.2f, 2.2f, 0f,
+            0f, 0f, 0f, 1f, 0f
+        )
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -94,6 +126,7 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
             viewProjectionMatrix, 0, perspectiveMatrix.perspectiveMatrix,
             0, viewMatrix, 0
         )
+        Matrix.invertM(invertedViewProjectionMatrix, 0, viewProjectionMatrix, 0)
 
         positionTableInScene()
         textureShaderProgram.useProgram()
@@ -110,6 +143,8 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
         positionObjectInScene(0f, (mallet?.height ?: 0f) / 2f, 0.4f)
         colorShaderProgram.setUniforms(modelViewProjectionMatrix, 0f, 0f, 1f)
         mallet?.draw()
+
+        blueMalletPosition = Geometry.Point(0f, (mallet?.height ?: 0f) / 2f, 0.4f)
 
         positionObjectInScene(0f, (puck?.height ?: 0f) / 2f, 0f)
         colorShaderProgram.setUniforms(modelViewProjectionMatrix, 0.8f, 0.8f, 1f)
@@ -150,5 +185,52 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
             viewMatrix, 0, eyesX.toFloat(), 1.2f, eyesZ.toFloat(), 0f,
             0f, 0f, 0f, 1f, 0f
         )
+    }
+
+    fun handleTouchPress(normalizedX: Float, normalizedY: Float) {
+        val ray = convertNormalized2DPointToRay(normalizedX, normalizedY)
+
+        val malletBoundingSphere = Geometry.Sphere(
+            Geometry.Point(
+                blueMalletPosition.x,
+                blueMalletPosition.y,
+                blueMalletPosition.z
+            ), (mallet?.height ?: 0f) / 2
+        )
+
+        malletPressed = Geometry.intersects(malletBoundingSphere, ray)
+        Log.d(TAG, "malletPressed is $malletPressed")
+    }
+
+    fun handleTouchDrag(x: Float, y: Float) {
+
+    }
+
+    private fun convertNormalized2DPointToRay(
+        normalizedX: Float,
+        normalizedY: Float
+    ): Geometry.Ray {
+        val nearPointNdc = floatArrayOf(normalizedX, normalizedY, -1f, 1f)
+        val farPointNdc = floatArrayOf(normalizedX, normalizedY, 1f, 1f)
+
+        val nearPointWorld = FloatArray(4)
+        val farPointWorld = FloatArray(4)
+
+        Matrix.multiplyMV(nearPointWorld, 0, invertedViewProjectionMatrix, 0, nearPointNdc, 0)
+        Matrix.multiplyMV(farPointWorld, 0, invertedViewProjectionMatrix, 0, farPointNdc, 0)
+
+        divideByW(nearPointWorld)
+        divideByW(farPointWorld)
+
+        val nearPointRay = Geometry.Point(nearPointWorld[0], nearPointWorld[1], nearPointWorld[2])
+        val farPointRay = Geometry.Point(farPointWorld[0], farPointWorld[1], farPointWorld[2])
+
+        return Geometry.Ray(nearPointRay, Geometry.vectorBetween(nearPointRay, farPointRay))
+    }
+
+    private fun divideByW(vector: FloatArray) {
+        vector[0] /= vector[3]
+        vector[1] /= vector[3]
+        vector[2] /= vector[3]
     }
 }
