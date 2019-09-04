@@ -106,6 +106,7 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
         texture = TextureHelper.loadTexture(context, R.drawable.air_hockey_surface)?.textureId ?: 0
 
         perspectiveMatrix = PerspectiveMatrix()
+        blueMalletPosition = Geometry.Point(0f, (mallet?.height ?: 0f) / 2f, 0.4f)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -140,11 +141,10 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
         mallet?.bindData(colorShaderProgram)
         mallet?.draw()
 
-        positionObjectInScene(0f, (mallet?.height ?: 0f) / 2f, 0.4f)
+//        positionObjectInScene(0f, (mallet?.height ?: 0f) / 2f, 0.4f)
+        positionObjectInScene(blueMalletPosition.x, blueMalletPosition.y, blueMalletPosition.z)
         colorShaderProgram.setUniforms(modelViewProjectionMatrix, 0f, 0f, 1f)
         mallet?.draw()
-
-        blueMalletPosition = Geometry.Point(0f, (mallet?.height ?: 0f) / 2f, 0.4f)
 
         positionObjectInScene(0f, (puck?.height ?: 0f) / 2f, 0f)
         colorShaderProgram.setUniforms(modelViewProjectionMatrix, 0.8f, 0.8f, 1f)
@@ -202,8 +202,15 @@ class AirHockeyRenderer(context: Context) : BaseRenderer(context) {
         Log.d(TAG, "malletPressed is $malletPressed")
     }
 
-    fun handleTouchDrag(x: Float, y: Float) {
-
+    fun handleTouchDrag(normalizedX: Float, normalizedY: Float) {
+        if (malletPressed) {
+            val ray = convertNormalized2DPointToRay(normalizedX, normalizedY)
+            val plane =
+                Geometry.Plane(Geometry.Point(0.0f, 0.0f, 0.0f), Geometry.Vector(0f, 1f, 0f))
+            val touchPoint = Geometry.intersectionPoint(ray, plane)
+            blueMalletPosition =
+                Geometry.Point(touchPoint.x, (mallet?.height ?: 0f) / 2f, touchPoint.z)
+        }
     }
 
     private fun convertNormalized2DPointToRay(
